@@ -9,12 +9,18 @@ import java.io.OutputStreamWriter;
 import java.io.Writer;
 
 import org.apache.http.HttpEntity;
+import org.apache.http.HttpHost;
 import org.apache.http.HttpResponse;
+import org.apache.http.auth.AuthScope;
+import org.apache.http.auth.NTCredentials;
 import org.apache.http.client.ClientProtocolException;
+import org.apache.http.client.CredentialsProvider;
 import org.apache.http.client.ResponseHandler;
 import org.apache.http.client.methods.HttpGet;
+import org.apache.http.impl.client.BasicCredentialsProvider;
 import org.apache.http.impl.client.CloseableHttpClient;
-import org.apache.http.impl.client.HttpClients;
+import org.apache.http.impl.client.HttpClientBuilder;
+import org.apache.http.impl.client.ProxyAuthenticationStrategy;
 import org.apache.http.util.EntityUtils;
 
 public class otp2file2sdcard {
@@ -22,15 +28,20 @@ public class otp2file2sdcard {
 	private String fileNamePath;
 	private String fileNamePathOnDevice;
 	private String siteURL;
+	private String ntUsername;
+	private String ntPassword;
+	private String localMachineName;
+	private String domainName;
 
-	/*
-	 * constructor otp2file2sdcard is declaredit accepts the 3 strings listed
-	 * below
-	 */
-	public otp2file2sdcard(String fileNamePath, String fileNamePathOnDevice, String siteURL) {
+	public otp2file2sdcard(String fileNamePath, String fileNamePathOnDevice, String siteURL, String ntUsername,
+	        String ntPassword, String localMachineName, String domainName) {
 		this.fileNamePath = fileNamePath;
 		this.fileNamePathOnDevice = fileNamePathOnDevice;
 		this.siteURL = siteURL;
+		this.ntUsername = ntUsername;
+		this.ntPassword = ntPassword;
+		this.localMachineName = localMachineName;
+		this.domainName = domainName;
 	}
 
 	/*
@@ -56,8 +67,22 @@ public class otp2file2sdcard {
 	 * response is OK it will convert it to string, print it and return it
 	 */
 	public String getResponseFromSite(String siteURL) {
+		String proxyHost = "192.168.5.125";
+		int proxyPort = 8080;
 
-		CloseableHttpClient httpclient = HttpClients.createDefault();
+		NTCredentials ntCreds = new NTCredentials(ntUsername, ntPassword, localMachineName, domainName);
+
+		CredentialsProvider credsProvider = new BasicCredentialsProvider();
+		credsProvider.setCredentials(new AuthScope(proxyHost, proxyPort), ntCreds);
+		HttpClientBuilder clientBuilder = HttpClientBuilder.create();
+
+		clientBuilder.useSystemProperties();
+		clientBuilder.setProxy(new HttpHost(proxyHost, proxyPort));
+		clientBuilder.setDefaultCredentialsProvider(credsProvider);
+		clientBuilder.setProxyAuthenticationStrategy(new ProxyAuthenticationStrategy());
+
+		CloseableHttpClient httpclient = clientBuilder.build();
+
 		String responseBody = "";
 
 		try {
@@ -69,11 +94,13 @@ public class otp2file2sdcard {
 
 				public String handleResponse(final HttpResponse response) throws ClientProtocolException, IOException {
 					int status = response.getStatusLine().getStatusCode();
+					String reason = response.getStatusLine().getReasonPhrase();
 					if (status >= 200 && status < 300) {
 						HttpEntity entity = response.getEntity();
 						return entity != null ? EntityUtils.toString(entity) : null;
 					} else {
-						throw new ClientProtocolException("Unexpected response status: " + status);
+						throw new ClientProtocolException("Unexpected response status: " + status + ". Reason: "
+						        + reason);
 					}
 				}
 
